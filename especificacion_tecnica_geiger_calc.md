@@ -20,19 +20,23 @@ La aplicación se enfocará en **Android** como plataforma principal, con una ve
     - Utilizará el micrófono del dispositivo.
     - Formato de grabación preferido: `.wav` para facilitar el análisis de datos crudos.
     - Se mostrará una indicación visual durante la grabación (ej. un indicador de "Grabando..." y el tiempo transcurrido).
+    - **Manejo de Permisos:** En Android, se solicitará el permiso de micrófono al usuario.
+    - **Limitaciones Web:** La grabación de audio en la web puede tener limitaciones debido a las políticas de seguridad del navegador. La aplicación debe manejar con gracia la ausencia de esta funcionalidad o las restricciones.
 - **Carga de Archivo:**
     - Permitirá seleccionar archivos de audio compatibles (ej. `.wav`, `.mp3`, `.m4a`) desde el almacenamiento del dispositivo.
     - Se usará `file_picker` para una experiencia nativa en todas las plataformas.
+    - **Conversión a Mono:** Todos los archivos de audio cargados se convertirán automáticamente a un solo canal (mono) para simplificar el análisis.
 
 ### 2.2. Visualización de Datos
 - **Gráfico de Amplitud y Picos:** Se mostrará un gráfico de la forma de onda del audio. Sobre este, se superpondrán marcadores visuales en los puntos detectados como "clics" válidos.
+    - **Ejes y Referencias:** El gráfico incluirá ejes con etiquetas de tiempo (segundos) y amplitud (normalizada, ej. -1.0 a 1.0) para una mejor interpretación.
 - **Espectrograma (Opcional/Avanzado):** Como alternativa, se podría renderizar un espectrograma para un análisis de frecuencia más detallado, aunque el gráfico de amplitud es prioritario y más simple de implementar.
 - **Navegación:** El gráfico será navegable horizontalmente (scroll) si la duración del audio excede el ancho de la pantalla.
 
 ### 2.3. Panel de Parámetros de Análisis
 Un formulario permitirá al usuario ajustar las variables clave para el cálculo, con valores predeterminados razonables:
 - `threshold` (Umbral de Amplitud): Nivel mínimo para que un pico sea considerado un "clic" válido.
-- `min_spacing_ms` (Separación Mínima): Tiempo mínimo (en milisegundos) que debe pasar entre dos clics para contarlos como eventos separados. Ayuda a evitar conteos dobles por ruido.
+- `min_spacing_ms` (Separación Mínima): Tiempo mínimo (en milisegundos) que debe pasar entre dos clics para contarlos como eventos separados. Ayuda a evitar conteos dobles por ruido. **Valor por defecto sugerido: Mínima distancia entre picos detectada en el audio, si es relevante.**
 - `analysis_duration_s` (Duración del Análisis): Tiempo total del audio (en segundos) a analizar.
 - `detector_efficiency` (Eficiencia del Detector): Un factor (de 0.0 a 1.0) que representa la eficiencia del contador Geiger físico. Es crucial para la precisión del cálculo de actividad.
 - `sample_volume` (Volumen de Muestra): Volumen (en cm³) o masa (en g) de la muestra que se está midiendo.
@@ -43,6 +47,11 @@ Una sección fija y destacada en la UI mostrará los resultados calculados en ti
 - **Actividad (Bq):** `(Cuentas / Tiempo Analizado) / Eficiencia del Detector`
 - **Tasa de Cuentas:** En `CPS` (Cuentas Por Segundo) y `CPM` (Cuentas Por Minuto).
 - **Dosis Estimada (μSv/h):** Calculada si se proporciona un isótopo y su factor de conversión.
+- **Información Adicional del Audio:**
+    - **Tiempo Total del Audio:** Duración total del archivo de audio cargado.
+    - **Amplitud Máxima:** El valor de amplitud más alto encontrado en el audio.
+    - **Amplitud Promedio (RMS):** El valor cuadrático medio de la amplitud, útil como indicador de ruido de fondo.
+    - **Mínima Distancia entre Picos:** La menor separación temporal (en milisegundos) entre dos clics detectados.
 
 ---
 
@@ -69,6 +78,10 @@ Una sección fija y destacada en la UI mostrará los resultados calculados en ti
 |                                      |
 |   [ Panel de Resultados ]            |
 |   Bq: 12.3 | CPM: 738 | μSv/h: 0.15  |
+|   Tiempo Total: X s                  |
+|   Amplitud Max: Y                    |
+|   Amplitud Promedio: Z               |
+|   Min Dist. Picos: W ms              |
 |                                      |
 +--------------------------------------+
 '''
@@ -87,9 +100,11 @@ lib/
 │   └── results_panel.dart       # Panel que muestra los resultados
 ├── services/
 │   ├── audio_analysis_service.dart # Lógica para detectar picos en los datos de audio
-│   └── calculation_service.dart    # Lógica para calcular Bq, dosis, etc.
+│   ├── calculation_service.dart    # Lógica para calcular Bq, dosis, etc.
+│   └── audio_decoder_service.dart  # Servicio para decodificar archivos de audio
 ├── models/
-│   └── analysis_params.dart  # Modelo de datos para los parámetros
+│   ├── analysis_params.dart  # Modelo de datos para los parámetros
+│   └── audio_data.dart       # Modelo de datos para el audio decodificado y sus métricas
 └── state/
     └── app_state.dart          # Gestor de estado (ej. con Provider o Riverpod)
 '''
@@ -114,6 +129,7 @@ dependencies:
   # Considerar el paquete 'record' si la grabación web es prioritaria.
   path_provider: ^2.1.3        # Para acceder a directorios del sistema de archivos.
   permission_handler: ^11.3.1  # Indispensable para solicitar permisos en Android/iOS.
+  wav_io: ^2.0.3             # Para la decodificación de archivos WAV.
 
   # --- Procesamiento y Cálculo ---
   # El paquete 'fft' puede ser útil si se implementa el espectrograma.
@@ -136,11 +152,12 @@ dependencies:
 ## 6. Flujo de Procesamiento de Datos
 
 1.  **Entrada:** El usuario graba o carga un archivo de audio.
-2.  **Decodificación:** El audio se convierte en un buffer de muestras numéricas (amplitud vs. tiempo).
+2.  **Decodificación:** El audio se convierte en un buffer de muestras numéricas (amplitud vs. tiempo) y se extraen métricas como tiempo total, amplitud máxima y promedio.
 3.  **Detección de Picos:** El `AudioAnalysisService` itera sobre las muestras y aplica los parámetros del usuario:
     - Ignora cualquier muestra por debajo del `threshold`.
     - Al detectar un pico, verifica que haya pasado el `min_spacing_ms` desde el último pico válido.
     - Si ambas condiciones se cumplen, se registra un "conteo".
+    - También se calcula la mínima distancia entre picos detectados.
 4.  **Cálculo:** El `CalculationService` toma el número total de conteos y, usando la duración del análisis y la eficiencia del detector, calcula la Actividad, CPM, etc.
 5.  **Actualización de UI:** El estado de la aplicación se actualiza con los nuevos resultados, y el panel de resultados y el visualizador de picos se redibujan.
 
