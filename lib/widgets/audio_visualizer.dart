@@ -15,17 +15,28 @@ class AudioVisualizer extends StatelessWidget {
         double maxX = 0;
         double maxY = 1.0;
         double minY = -1.0;
+        double bottomTitleInterval = 1.0; // Default interval
+        double originalTotalDurationSeconds = 0; // To store original duration for label conversion
 
         if (audioData != null) {
           final audioBuffer = audioData.audioBuffer;
-          // Downsample for visualization
-          final step = (audioBuffer.length / 500).ceil();
+          originalTotalDurationSeconds = audioData.totalDurationSeconds;
+          const normalizedMaxX = 500.0; // Fixed visual width for the chart
+
+          // Downsample for visualization and normalize x-values
+          final step = (audioBuffer.length / normalizedMaxX).ceil(); // Adjust step based on normalizedMaxX
           for (int i = 0; i < audioBuffer.length; i += step) {
-            spots.add(FlSpot(i.toDouble(), audioBuffer[i]));
+            final normalizedX = (i / audioBuffer.length) * normalizedMaxX;
+            spots.add(FlSpot(normalizedX, audioBuffer[i]));
           }
-          maxX = audioData.totalDurationSeconds * 44100; // Assuming 44100 samples/sec
+          maxX = normalizedMaxX; // Set chart's maxX to the normalized max
+
           maxY = audioData.maxAmplitude > 0 ? audioData.maxAmplitude * 1.1 : 1.0; // Add some padding
           minY = audioData.maxAmplitude > 0 ? -audioData.maxAmplitude * 1.1 : -1.0;
+
+          // Calculate bottomTitleInterval based on desired number of labels (e.g., 5 labels)
+          // This will give us an interval in normalized X units
+          bottomTitleInterval = normalizedMaxX / 5; // To get 5 labels
         }
 
         return Card(
@@ -39,11 +50,14 @@ class AudioVisualizer extends StatelessWidget {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 30,
+                      reservedSize: 40,
+                      interval: bottomTitleInterval,
                       getTitlesWidget: (value, meta) {
+                        // Convert normalized value back to original seconds for display
+                        final originalSeconds = (value / maxX) * originalTotalDurationSeconds;
                         return SideTitleWidget(
                           axisSide: meta.axisSide,
-                          child: Text('${(value / 44100).toStringAsFixed(1)}s'),
+                          child: Text('${originalSeconds.toStringAsFixed(0)}s'), // Display in seconds
                         );
                       },
                     ),

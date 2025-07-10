@@ -15,42 +15,44 @@ class AnalysisForm extends StatelessWidget {
           elevation: 4,
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text('Analysis Parameters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                _buildSlider(
-                  context,
-                  'Threshold',
-                  params.threshold,
-                  0.0,
-                  1.0,
-                  (newValue) => appState.updateAnalysisParams(
-                    params.copyWith(threshold: newValue),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Analysis Parameters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  _buildSlider(
+                    context,
+                    'Threshold',
+                    params.threshold,
+                    0.0,
+                    1.0,
+                    (newValue) => appState.updateAnalysisParams(
+                      params.copyWith(threshold: newValue),
+                    ),
                   ),
-                ),
-                _buildSlider(
-                  context,
-                  'Min Spacing (ms)',
-                  params.minSpacingMs.toDouble(),
-                  10,
-                  200,
-                  (newValue) => appState.updateAnalysisParams(
-                    params.copyWith(minSpacingMs: newValue.toInt()),
+                  _buildSlider(
+                    context,
+                    'Min Spacing (ms)',
+                    params.minSpacingMs.toDouble(),
+                    10,
+                    200,
+                    (newValue) => appState.updateAnalysisParams(
+                      params.copyWith(minSpacingMs: newValue.toInt()),
+                    ),
                   ),
-                ),
-                _buildSlider(
-                  context,
-                  'Detector Efficiency',
-                  params.detectorEfficiency,
-                  0.01,
-                  1.0,
-                  (newValue) => appState.updateAnalysisParams(
-                    params.copyWith(detectorEfficiency: newValue),
+                  _buildSlider(
+                    context,
+                    'Detector Efficiency',
+                    params.detectorEfficiency,
+                    0.01,
+                    1.0,
+                    (newValue) => appState.updateAnalysisParams(
+                      params.copyWith(detectorEfficiency: newValue),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
