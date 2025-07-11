@@ -12,7 +12,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.1'  # Cambiá si usás otra versión
+          flutter-version: '3.32.6'  # SDK 3.8.1 required
           channel: 'stable'
 
       - run: flutter pub get
