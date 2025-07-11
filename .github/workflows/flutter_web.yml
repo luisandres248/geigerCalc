@@ -7,22 +7,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.6'  # SDK 3.8.1 required
+          flutter-version: '3.22.1'
+          channel: stable
 
-      - run: flutter --version
       - run: flutter pub get
       - run: flutter build web --release
 
-      - run: ls -lh build/web
-      - run: cat build/web/index.html | head -n 10
+      - name: Verifica contenido generado
+        run: |
+          echo "Listando build/web:"
+          ls -lh build/web
+          echo "Mostrando index.html:"
+          head -n 20 build/web/index.html
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build/web
+          publish_dir: build/web
+
