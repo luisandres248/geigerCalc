@@ -6,6 +6,8 @@ class AudioData {
   final double maxAmplitude;
   final double averageAmplitude;
   final int minPeakDistanceMs;
+  final List<double> peakTimestamps;
+  final int sampleRate;
 
   AudioData({
     required this.audioBuffer,
@@ -13,5 +15,7 @@ class AudioData {
     required this.maxAmplitude,
     required this.averageAmplitude,
     required this.minPeakDistanceMs,
+    required this.peakTimestamps,
+    required this.sampleRate,
   });
 }

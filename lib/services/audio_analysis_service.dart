@@ -5,43 +5,60 @@ import '../models/analysis_params.dart';
 class AudioAnalysisResult {
   final int peakCount;
   final int minPeakDistanceMs;
+  final List<double> peakTimestamps; // Timestamps of peaks in seconds
 
   AudioAnalysisResult({
     required this.peakCount,
     required this.minPeakDistanceMs,
+    required this.peakTimestamps,
   });
 }
 
 class AudioAnalysisService {
   static AudioAnalysisResult detectPeaks(Float32List audioBuffer, AnalysisParams params, int sampleRate) {
-    int peakCount = 0;
-    int lastPeakPosition = -1;
-    int minPeakDistanceSamples = audioBuffer.length; // Initialize with a large value
-    List<int> peakPositions = [];
+    if (sampleRate <= 0) { // Prevent division by zero or invalid calculations
+        return AudioAnalysisResult(peakCount: 0, minPeakDistanceMs: 0, peakTimestamps: []);
+    }
 
-    final int minSpacingSamples = (params.minSpacingMs * 44100) ~/ 1000; // Assuming 44100 sample rate
+    int peakCount = 0;
+    int lastPeakSampleIndex = -1; // Store sample index of the last peak
+    int minPeakDistanceSamples = audioBuffer.length;
+    List<int> peakSampleIndexes = []; // Store sample indexes of detected peaks
+
+    // Calculate minSpacingSamples using the actual sampleRate
+    final int minSpacingSamples = (params.minSpacingMs * sampleRate) ~/ 1000;
 
     for (int i = 0; i < audioBuffer.length; i++) {
       if (audioBuffer[i].abs() > params.threshold) {
-        if (lastPeakPosition == -1 || (i - lastPeakPosition) > minSpacingSamples) {
+        if (lastPeakSampleIndex == -1 || (i - lastPeakSampleIndex) > minSpacingSamples) {
           peakCount++;
-          peakPositions.add(i);
-          if (lastPeakPosition != -1) {
-            final currentDistance = i - lastPeakPosition;
-            if (currentDistance < minPeakDistanceSamples) {
-              minPeakDistanceSamples = currentDistance;
+          peakSampleIndexes.add(i);
+          if (lastPeakSampleIndex != -1) {
+            final currentDistanceSamples = i - lastPeakSampleIndex;
+            if (currentDistanceSamples < minPeakDistanceSamples) {
+              minPeakDistanceSamples = currentDistanceSamples;
             }
           }
-          lastPeakPosition = i;
+          lastPeakSampleIndex = i;
         }
       }
     }
 
-    final int minPeakDistanceMs = (minPeakDistanceSamples * 1000 / 44100).toInt();
+    // Convert minPeakDistanceSamples to milliseconds using actual sampleRate
+    final int minPeakDistanceMsResult = peakSampleIndexes.length > 1 && sampleRate > 0
+        ? (minPeakDistanceSamples * 1000 / sampleRate).round()
+        : 0;
+
+    // Convert peak sample indexes to timestamps in seconds
+    List<double> peakTimestamps = [];
+    if (sampleRate > 0) {
+        peakTimestamps = peakSampleIndexes.map((sampleIndex) => sampleIndex / sampleRate).toList();
+    }
 
     return AudioAnalysisResult(
       peakCount: peakCount,
-      minPeakDistanceMs: peakPositions.length > 1 ? minPeakDistanceMs : 0,
+      minPeakDistanceMs: minPeakDistanceMsResult,
+      peakTimestamps: peakTimestamps,
     );
   }
 }

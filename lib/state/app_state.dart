@@ -14,20 +14,45 @@ import 'package:geiger_calc/services/audio_analysis_service.dart';
 import 'package:geiger_calc/services/calculation_service.dart';
 import 'package:geiger_calc/services/audio_decoder_service.dart';
 import 'package:geiger_calc/models/audio_data.dart';
+import 'package:geiger_calc/services/audio_player_service.dart'; // Import AudioPlayerService
 
 class AppState with ChangeNotifier {
   AnalysisParams _params = AnalysisParams();
   CalculationResult? _result;
   AudioData? _audioData;
+  final AudioPlayerService audioPlayerService = AudioPlayerService(); // Instance of AudioPlayerService
   bool _isLoading = false;
   final AudioRecorder? _audioRecorder = kIsWeb ? null : AudioRecorder();
   bool _isRecording = false;
   Timer? _recordingTimer;
   Duration _recordingDuration = Duration.zero;
 
+  // Constructor to initialize AudioPlayerService
+  AppState() {
+    audioPlayerService.init().then((_) {
+      // Listen to player state changes to notify UI if needed
+      audioPlayerService.playerStateStream.listen((state) {
+        // We might want to trigger notifyListeners() for specific state changes
+        // if they affect UI elements not directly listening to playerStateStream.
+        // For now, direct consumers will use the stream.
+        notifyListeners(); // General notification for state change
+      });
+      audioPlayerService.playbackDispositionStream.listen((disposition) {
+        // Similar to above, notify if general UI elements depend on this.
+        // Direct consumers (like the visualizer progress bar) will use the stream.
+         notifyListeners(); // General notification for progress change
+      });
+    });
+  }
+
   AnalysisParams get params => _params;
   CalculationResult? get result => _result;
   AudioData? get audioData => _audioData;
+  // Expose player state and disposition for UI
+  PlayerState get playerState => audioPlayerService.currentPlayerState;
+  Stream<PlaybackDisposition> get playbackDispositionStream => audioPlayerService.playbackDispositionStream;
+  Duration get currentAudioDuration => audioPlayerService.currentAudioDuration;
+
   bool get isLoading => _isLoading;
   bool get isRecording => _isRecording;
   Duration get recordingDuration => _recordingDuration;
@@ -42,15 +67,37 @@ class AppState with ChangeNotifier {
     try {
       FilePickerResult? pickerResult = await FilePicker.platform.pickFiles(
         type: FileType.audio,
+        // TODO: Consider specifying allowedExtensions: ['wav', 'mp3']
+        // However, AudioDecoderService needs to be ready for mp3 on mobile first.
       );
 
       if (pickerResult != null && pickerResult.files.single.bytes != null) {
-        final Uint8List bytes = pickerResult.files.single.bytes!;
-        await _processAudioBytes(bytes);
-      } else if (pickerResult != null && pickerResult.files.single.path != null) {
+        final PlatformFile file = pickerResult.files.single;
+        final Uint8List bytes = file.bytes!;
+         String fileExtension = file.extension ?? '';
+        if (fileExtension.isEmpty) {
+          // Try to get extension from name if not available
+           final String name = file.name;
+           final int dotIndex = name.lastIndexOf('.');
+           if (dotIndex != -1 && dotIndex < name.length -1) {
+              fileExtension = name.substring(dotIndex + 1).toLowerCase();
+           }
+        }
+        // Ensure we have a valid extension to pass, default to 'wav' or handle error
+        // For now, if extension is empty, it might fail in AudioDecoderService on mobile.
+        // A more robust solution would be to ensure extension is always present or handle unknown.
+        await _processAudioBytes(bytes, fileExtension);
+      } else if (pickerResult != null && pickerResult.files.single.path != null && !kIsWeb) {
         // This branch is for non-web platforms where path is available
-        final Uint8List bytes = await pickerResult.files.single.bytes!; // Read bytes from path
-        await _processAudioBytes(bytes);
+        final PlatformFile file = pickerResult.files.single;
+        final String? filePath = file.path;
+        if (filePath != null) {
+          final Uint8List bytes = await File(filePath).readAsBytes();
+          final String fileExtension = file.extension ?? p.extension(filePath).replaceFirst('.', '');
+          await _processAudioBytes(bytes, fileExtension);
+        } else {
+           throw Exception("File path is null for a non-web platform.");
+        }
       }
     } catch (e) {
       print('Error loading or analyzing file: $e');
@@ -61,8 +108,9 @@ class AppState with ChangeNotifier {
     }
   }
 
-  Future<void> _processAudioBytes(Uint8List bytes) async {
-    final DecodedAudio decodedAudio = await AudioDecoderService.decodeAudioBytes(bytes);
+  Future<void> _processAudioBytes(Uint8List bytes, String fileExtension) async {
+    // Decode audio for visualization
+    final DecodedAudio decodedAudio = await AudioDecoderService.decodeAudioBytes(bytes, fileExtension);
     final Float32List audioBuffer = decodedAudio.audioBuffer;
     final int sampleRate = decodedAudio.sampleRate;
 
@@ -78,38 +126,63 @@ class AppState with ChangeNotifier {
     final double averageAmplitude = sqrt(sumAmps / audioBuffer.length);
     final double totalDurationSeconds = audioBuffer.length / sampleRate;
 
+    // First, perform analysis to get peak data
+    final AudioAnalysisResult analysisResult = AudioAnalysisService.detectPeaks(audioBuffer, _params, sampleRate);
+
     _audioData = AudioData(
       audioBuffer: audioBuffer,
       totalDurationSeconds: totalDurationSeconds,
       maxAmplitude: maxAmp,
       averageAmplitude: averageAmplitude,
-      minPeakDistanceMs: 0, // This will be updated by AudioAnalysisService
+      minPeakDistanceMs: analysisResult.minPeakDistanceMs,
+      peakTimestamps: analysisResult.peakTimestamps,
+      sampleRate: sampleRate, // Store sampleRate
     );
 
-    final AudioAnalysisResult analysisResult = AudioAnalysisService.detectPeaks(_audioData!.audioBuffer, _params, sampleRate);
+    // Calculate metrics based on analysis results
     _result = CalculationService.calculateMetrics(counts: analysisResult.peakCount, params: _params);
-    _audioData = AudioData(
-      audioBuffer: _audioData!.audioBuffer,
-      totalDurationSeconds: _audioData!.totalDurationSeconds,
-      maxAmplitude: _audioData!.maxAmplitude,
-      averageAmplitude: _audioData!.averageAmplitude,
-      minPeakDistanceMs: analysisResult.minPeakDistanceMs,
-    );
+
+    // Note: _audioData is already set with all necessary info including peakTimestamps.
+    // No need to re-create it unless other properties were meant to be updated separately.
+
+    // Load audio into player service (using original bytes and extension)
+    // This happens after visual data is processed.
+    await audioPlayerService.loadAudio(bytes, fileExtension);
+    // Notify listeners after all processing, including loading audio for playback
+    notifyListeners();
   }
 
   void updateAnalysisParams(AnalysisParams newParams) {
     _params = newParams;
     if (_audioData != null) {
-      final AudioAnalysisResult analysisResult = AudioAnalysisService.detectPeaks(_audioData!.audioBuffer, _params, _audioData!.totalDurationSeconds.toInt() * 44100);
-      _result = CalculationService.calculateMetrics(counts: analysisResult.peakCount, params: _params);
-      // Update minPeakDistanceMs in AudioData if it's different
-      if (_audioData!.minPeakDistanceMs != analysisResult.minPeakDistanceMs) {
+      // Use the stored sampleRate
+      final int sampleRate = _audioData!.sampleRate;
+
+      if (sampleRate > 0) {
+        final AudioAnalysisResult analysisResult = AudioAnalysisService.detectPeaks(_audioData!.audioBuffer, _params, sampleRate);
+        _result = CalculationService.calculateMetrics(counts: analysisResult.peakCount, params: _params);
+
         _audioData = AudioData(
           audioBuffer: _audioData!.audioBuffer,
           totalDurationSeconds: _audioData!.totalDurationSeconds,
           maxAmplitude: _audioData!.maxAmplitude,
           averageAmplitude: _audioData!.averageAmplitude,
           minPeakDistanceMs: analysisResult.minPeakDistanceMs,
+          peakTimestamps: analysisResult.peakTimestamps,
+          sampleRate: sampleRate, // Keep the same sampleRate
+        );
+      } else {
+        // This case should ideally not be reached if sampleRate is always correctly stored.
+        // If it is, it implies an issue during initial processing.
+        _result = null;
+         _audioData = AudioData(
+          audioBuffer: _audioData!.audioBuffer,
+          totalDurationSeconds: _audioData!.totalDurationSeconds,
+          maxAmplitude: _audioData!.maxAmplitude,
+          averageAmplitude: _audioData!.averageAmplitude,
+          minPeakDistanceMs: 0,
+          peakTimestamps: [],
+          sampleRate: 0, // Reflect that sampleRate is invalid
         );
       }
     }
@@ -200,7 +273,8 @@ class AppState with ChangeNotifier {
       if (path != null) {
         _setLoading(true); // Set loading true before processing audio
         final fileBytes = await File(path).readAsBytes();
-        await _processAudioBytes(fileBytes); // This will set loading to false
+        // Recordings are saved as WAV
+        await _processAudioBytes(fileBytes, 'wav'); // This will set loading to false
       } else {
         _setLoading(false); // If path is null, ensure loading is false
         notifyListeners(); // Notify to update UI if no path
@@ -213,5 +287,14 @@ class AppState with ChangeNotifier {
       _setLoading(false);
       notifyListeners(); // Notify to update UI on error
     }
+  }
+
+  // Call this method when AppState is no longer needed to clean up resources.
+  @override
+  void dispose() {
+    audioPlayerService.dispose();
+    _recordingTimer?.cancel();
+    _audioRecorder?.dispose();
+    super.dispose(); // Important if extending ChangeNotifier or other classes with dispose methods
   }
 }
