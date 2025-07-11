@@ -13,6 +13,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.1'  # Cambiá si usás otra versión
+          channels: 'stable'
 
       - run: flutter pub get
       - run: flutter build web --release
