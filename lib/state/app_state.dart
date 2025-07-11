@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -21,12 +22,15 @@ class AppState with ChangeNotifier {
   bool _isLoading = false;
   final AudioRecorder? _audioRecorder = kIsWeb ? null : AudioRecorder();
   bool _isRecording = false;
+  Timer? _recordingTimer;
+  Duration _recordingDuration = Duration.zero;
 
   AnalysisParams get params => _params;
   CalculationResult? get result => _result;
   AudioData? get audioData => _audioData;
   bool get isLoading => _isLoading;
   bool get isRecording => _isRecording;
+  Duration get recordingDuration => _recordingDuration;
 
   void _setLoading(bool loading) {
     _isLoading = loading;
@@ -157,39 +161,57 @@ class AppState with ChangeNotifier {
           final path = p.join(directory.path, 'geiger_recording.wav');
           await _audioRecorder!.start(const RecordConfig(encoder: AudioEncoder.wav), path: path);
           _isRecording = true;
+          _recordingDuration = Duration.zero;
+          _recordingTimer?.cancel(); // Cancel any existing timer
+          _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+            _recordingDuration = Duration(seconds: _recordingDuration.inSeconds + 1);
+            notifyListeners();
+          });
           notifyListeners();
         }
       } else {
         print('Microphone permission not granted or recorder not available.');
+        _setLoading(false); // Ensure loading is false if we don't start
       }
     } catch (e) {
       print('Error starting recording: $e');
-    } finally {
+      _isRecording = false; // Ensure recording state is false on error
+      _recordingTimer?.cancel();
+      _recordingDuration = Duration.zero;
       _setLoading(false);
     }
+    // No finally setLoading(false) here, as it could be set true and recording starts
   }
 
   Future<void> stopRecording() async {
-    if (kIsWeb) {
-      print('Recording is not fully supported on web yet.');
+    if (kIsWeb || _audioRecorder == null || !_isRecording) {
+      print('Recording not active or not supported.');
       return;
     }
-
-    _setLoading(true);
+    // setLoading is handled by _processAudioBytes or if error occurs
+    // _setLoading(true);
     try {
-      if (_audioRecorder != null) {
-        final path = await _audioRecorder!.stop();
-        _isRecording = false;
-        notifyListeners();
-        if (path != null) {
-          final fileBytes = await File(path).readAsBytes();
-          await _processAudioBytes(fileBytes);
-        }
+      final path = await _audioRecorder!.stop();
+      _isRecording = false;
+      _recordingTimer?.cancel();
+      _recordingDuration = Duration.zero;
+      // notifyListeners(); // Notifying after processing audio or if path is null
+
+      if (path != null) {
+        _setLoading(true); // Set loading true before processing audio
+        final fileBytes = await File(path).readAsBytes();
+        await _processAudioBytes(fileBytes); // This will set loading to false
+      } else {
+        _setLoading(false); // If path is null, ensure loading is false
+        notifyListeners(); // Notify to update UI if no path
       }
     } catch (e) {
       print('Error stopping recording: $e');
-    } finally {
+      _isRecording = false;
+      _recordingTimer?.cancel();
+      _recordingDuration = Duration.zero;
       _setLoading(false);
+      notifyListeners(); // Notify to update UI on error
     }
   }
 }

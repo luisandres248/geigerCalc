@@ -35,14 +35,14 @@ Para marcar una tarea como completada, reemplace `[ ]` por `[x]`.
 
 ### Fase 5: Funcionalidades de Plataforma y Pulido
 - [x] **Carga de Archivos:** Implementar la lógica con `file_picker`.
-- [ ] **Manejo de Permisos (Android):** Integrar `permission_handler`.
-- [ ] **Grabación de Audio:** Implementar la lógica con `flutter_sound`.
-- [ ] **Manejo de Plataforma Web:** Deshabilitar la grabación de audio de forma controlada.
+- [x] **Manejo de Permisos (Android):** Integrar `permission_handler`.
+- [x] **Grabación de Audio:** Implementar la lógica con `flutter_sound`. (Nota: Se usó `record` y se mejoró)
+- [x] **Manejo de Plataforma Web:** Deshabilitar la grabación de audio de forma controlada.
 - [x] **Decodificación de Audio Real:** Implementar la decodificación de archivos de audio (ej. WAV y MP3) en `AppState` o un nuevo servicio, incluyendo conversión a mono.
 - [x] **Mejorar Visualizador de Audio:** Añadir ejes y etiquetas al gráfico de audio.
 - [x] **Extender Panel de Resultados:** Mostrar tiempo total, amplitud máxima, amplitud promedio y mínima distancia entre picos.
 - [x] **Ajustar `AnalysisParams` y `AudioAnalysisService`:** Para soportar los nuevos indicadores y valores por defecto.
-- [ ] **Manejo de Permisos (Android):** Integrar `permission_handler`.
-- [ ] **Grabación de Audio:** Implementar la lógica con `flutter_sound`.
-- [ ] **Manejo de Plataforma Web:** Deshabilitar la grabación de audio de forma controlada.
+- [x] **Manejo de Permisos (Android):** Integrar `permission_handler`.
+- [x] **Grabación de Audio:** Implementar la lógica con `flutter_sound`. (Nota: Se usó `record` y se mejoró)
+- [x] **Manejo de Plataforma Web:** Deshabilitar la grabación de audio de forma controlada.
 
