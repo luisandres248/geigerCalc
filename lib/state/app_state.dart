@@ -14,7 +14,8 @@ import 'package:geiger_calc/services/audio_analysis_service.dart';
 import 'package:geiger_calc/services/calculation_service.dart';
 import 'package:geiger_calc/services/audio_decoder_service.dart';
 import 'package:geiger_calc/models/audio_data.dart';
-import 'package:geiger_calc/services/audio_player_service.dart'; // Import AudioPlayerService
+import 'package:geiger_calc/services/audio_player_service.dart';
+import 'package:flutter_sound/public/flutter_sound_player.dart' as fs_player; // Added import
 
 class AppState with ChangeNotifier {
   AnalysisParams _params = AnalysisParams();
@@ -50,7 +51,7 @@ class AppState with ChangeNotifier {
   AudioData? get audioData => _audioData;
   // Expose player state and disposition for UI
   PlayerState get playerState => audioPlayerService.currentPlayerState;
-  Stream<PlaybackDisposition> get playbackDispositionStream => audioPlayerService.playbackDispositionStream;
+  Stream<fs_player.PlaybackDisposition> get playbackDispositionStream => audioPlayerService.playbackDispositionStream; // Changed to fs_player.PlaybackDisposition
   Duration get currentAudioDuration => audioPlayerService.currentAudioDuration;
 
   bool get isLoading => _isLoading;

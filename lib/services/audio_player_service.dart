@@ -108,11 +108,11 @@ class AudioPlayerService {
           durationCompleter.future,
           Future.delayed(const Duration(seconds: 3), () {
             if (!durationCompleter.isCompleted) {
-              // Try to get duration via media properties as a fallback if onProgress didn't provide it quickly
+              // Try to get duration via track properties as a fallback if onProgress didn't provide it quickly
               // This is more of a safeguard.
-              _player!.getMediaProperties(_currentFilePath!).then((props) {
-                if (props?.duration != null) {
-                  _currentAudioDuration = Duration(milliseconds: props!.duration!.toInt());
+              _player!.getTrackProperties(_currentFilePath!).then((trackProps) { // Changed to getTrackProperties
+                if (trackProps?.duration != null) {
+                  _currentAudioDuration = trackProps!.duration!; // duration is already a Duration object
                   durationCompleter.complete(_currentAudioDuration);
                 } else {
                   durationCompleter.complete(null); // Still no duration
