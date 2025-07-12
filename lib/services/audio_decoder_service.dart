@@ -4,6 +4,7 @@ import 'package:wav_io/wav_io.dart' as wav_io;
 
 // Imports for Mobile MP3 decoding
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:flutter_sound/public/flutter_sound_player.dart' as fs_player; // Added for types
 import 'dart:io' as io;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -114,10 +115,10 @@ class AudioDecoderService {
           // Initialize player to use getMediaProperties
           await player.openPlayer();
 
-          MediaProperties? mediaProperties = await player.getMediaProperties(tempInputPath);
+          fs_player.TrackProperties? trackProperties = await player.getTrackProperties(tempInputPath);
           // Default to 44100 if sampleRate is not available, though it's unlikely for MP3.
-          int sampleRate = mediaProperties?.sampleRate?.toInt() ?? 44100;
-          // int originalNumChannels = mediaProperties?.numChannels?.toInt() ?? 1;
+          int sampleRate = trackProperties?.sampleRate?.toInt() ?? 44100;
+          // int originalNumChannels = trackProperties?.nbChannels?.toInt() ?? 1;
 
           // Extract PCM data.
           // pcmExtractor will output 16-bit PCM data.
@@ -150,7 +151,7 @@ class AudioDecoderService {
 
         } catch (e) {
           // Try to provide more specific error if possible
-          if (e is PlayerException && e.message != null && e.message!.contains("No such file")) {
+          if (e is fs_player.PlayerException && e.message != null && e.message!.contains("No such file")) { // Used fs_player.PlayerException
              throw Exception('Error decoding MP3 on mobile: Input file for pcmExtractor not found or inaccessible. Path: $tempInputPath. Original error: $e');
           }
           throw Exception('Error decoding MP3 file on mobile: $e');
